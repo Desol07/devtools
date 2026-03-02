@@ -1,6 +1,6 @@
 Overview
 
-A $149 quote for a single-page website in Los Angeles is low enough that the main risks are usually not the page itself. The typical failure modes are:
+A $149 quote for a single-page website is low enough that the main risks are usually not the page itself. The typical failure modes are:
 
 - Undefined scope (missing basics like mobile QA or metadata)
 - Ownership gaps (domain/hosting accounts controlled by the vendor)
@@ -253,7 +253,7 @@ This is not required to follow the workflow in this repo; it is one possible imp
 
 ## FAQ
 
-### Is $149 “fair” in LA?
+### Is $149 “fair”?
 
 It can be fair for a template-based one-pager if deliverables are defined, ownership is clear, and recurring fees are optional and itemized.
 

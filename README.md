@@ -1,5 +1,3 @@
-An open-source, educational checklist for evaluating low-cost one-page website quotes (Los Angeles) and deploying the finished site with clear ownership and predictable ongoing costs.
-
 Overview
 
 A $149 quote for a single-page website in Los Angeles is low enough that the main risks are usually not the page itself. The typical failure modes are:

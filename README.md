@@ -1,394 +1,297 @@
-# AI-in-Prod Patterns (Educational Project)
+An open-source, educational checklist for evaluating low-cost one-page website quotes (Los Angeles) and deploying the finished site with clear ownership and predictable ongoing costs.
 
-## Overview
+Overview
 
-Large language models (LLMs) can speed up drafting, code suggestions, and internal automation. In production workflows, the same qualities that make LLMs useful (fast, fluent, confident outputs) can introduce reliability issues:
+A $149 quote for a single-page website in Los Angeles is low enough that the main risks are usually not the page itself. The typical failure modes are:
 
-* Confident but incorrect answers (“looks right” failures)
-* Subtle edge-case bugs in generated code
-* Automation complacency (outputs accepted without review)
-* Silent regressions when prompts/models/tools change
-* Security risks when LLM output is used as commands, SQL, or tool calls
+- Undefined scope (missing basics like mobile QA or metadata)
+- Ownership gaps (domain/hosting accounts controlled by the vendor)
+- Portability limits (no export/migration path)
+- Recurring fees (hosting/maintenance required to keep the site online)
 
-This README describes a practical, engineering-first workflow that treats AI output as untrusted input and adds deterministic controls (schemas, tests, policies), risk-tiered human oversight, and evaluation to prevent drift. The goal is to keep AI as leverage, not technical debt.
+This repo provides a small workflow to help you decide whether the quote is acceptable, and how to host the site after delivery.
+
+What this repo is (and isn’t)
+
+This repo is:
+
+- A vendor-neutral checklist and deployment guide
+- A way to compare quotes using *total cost of ownership (TCO)
+- A reference implementation for a portable one-page static site
+
+This repo is not:
+
+- Legal advice
+- A “best agency” recommendation
+- A substitute for a written contract/scope of work
+
+
+Quick decision guide
+
+$149 is usually reasonable if:
+
+- The site is template-based (expected at this price)
+- Mobile responsive layout is included
+- Basic SEO metadata (title + meta description) is included
+- You receive admin access and/or **exportable files
+- Any recurring fees are clearly listed and optional
+
+
+$149 is usually a red flag if:
+
+- The domain is registered under the vendor’s account
+- You don’t get hosting/platform admin access
+- You can’t export files or migrate later
+- Ongoing “maintenance” is required to keep the site live
+- Deliverables are vague (“SEO included” with no specifics)
+
+
+Step-by-step evaluation workflow
+
+Step 1 — Identify the build type (determines hosting and portability)
+
+Ask the vendor: What platform will you build it on?
+
+- Static HTML/CSS/JS (portable; low ongoing cost)
+- WordPress (editable UI; needs updates/backups)
+- Webflow/Wix/Squarespace (easy editing; platform constraints)
+
+If you can’t get a clear answer, stop and request a written scope.
+
+
+Step 2 — Verify ownership and access (non-negotiable)
+
+Request written confirmation that:
+
+- Domain is registered under your email/account
+- You receive admin access to hosting/platform
+- You can download the site files** or use an export feature
+- All recurring costs are itemized (hosting, maintenance, edits)
+
+Rule of thumb: If you don’t control the domain + hosting login, you don’t control the site.
+
+
+Step 3 — Confirm minimum deliverables (baseline for one-page sites)
+
+A practical baseline deliverables list:
+
+- Mobile responsive layout
+- HTTPS/SSL support (often host-managed)
+- Title + meta description (basic SEO metadata)
+- Contact CTA behavior defined (form vs mailto vs phone)
+- Revision limit and delivery date
+
+
+Step 4 — Calculate Total Cost of Ownership (TCO)
+
+A $149 quote can be inexpensive or costly depending on recurring fees.
+
+TCO (12 months) = build_fee + (monthly_fees × 12) + domain/year
+
+Use TCO to compare:
+- Vendor A: low build fee + high monthly cost
+- Vendor B: higher build fee + low monthly cost
+- DIY/static: low ongoing cost + higher initial effort
+
+
+Architecture (reference implementation)
+
+A minimal portable structure for static one-page sites:
+
 
 ---
 
-## Step-by-step workflow
+## Architecture (reference implementation)
 
-### Step 1: Classify the use case by risk tier
+A minimal portable structure for static one-page sites:
 
-Use a tier model so controls match impact.
+```
 
-Tier 0 (Low risk)
+site/
+index.html
+styles.css
+assets/
+images/
 
-* Examples: brainstorming, first drafts, internal notes
-* Controls: human edit before publishing; no direct actions
+````
 
-Tier 1 (Medium risk)
+Deployment workflow:
 
-* Examples: code suggestions, refactors, internal scripts
-* Controls: PR review required; CI gates must pass (lint/typecheck/tests)
-
-Tier 2 (High risk)
-
-* Examples: production automation, customer-facing decisions, permissions, destructive actions
-* Controls: strict validation + approval gate + sandboxed execution + rollout controls
-
-Rule of thumb: If the output can affect customers, security, money, permissions, or production state, treat it as Tier 2.
-
----
-
-### Step 2: Constrain outputs with explicit contracts
-
-When AI output feeds downstream systems, prefer structured outputs and enforceable contracts.
-
-Example output contract (shape)
-
-* task: string
-* summary: string
-* risk_flags: string[]
-* actions: { name: string, params: object, reason: string }[]
-
-Key constraints
-
-* Output must be strictly parseable (JSON or another strict format).
-* Required fields must always be present.
-* Any action must be explicit and separately validated.
+1. Preview locally
+2. Commit to a repository
+3. Deploy to a static host
+4. Point DNS for your domain
+5. Enable SSL + redirects
 
 ---
 
-### Step 3: Validate deterministically (fail closed)
+## Setup: local preview (static)
 
-Avoid using “LLM self-check” as your primary safety mechanism. Use deterministic validators first:
+### Option A — Python
+```bash
+cd site
+python -m http.server 8000
+# open http://localhost:8000
+````
 
-* Schema validation (JSON Schema / Zod / Pydantic)
-* Parsing/compilation/type-checking for code outputs
-* Linters and formatters
-* Unit + integration tests
-* Policy checks (allowlists, bounds, invariants)
-* Security scanning (SAST/dependency scanning) where applicable
+### Option B — Node
 
-Fail closed: if validation fails, reject the output and require correction.
-
-Pseudocode: generation + validation gate
-
-```pseudo
-input = request()
-
-tier = classify(input)
-
-raw = llm.generate(prompt_for(input, tier))
-
-parsed = strict_parse(raw)
-if not parsed:
-  raw = llm.generate(prompt_for(input, tier) + "Return strict JSON only.")
-  parsed = strict_parse(raw)
-
-assert schema_validate(parsed)
-assert policy_validate(parsed, tier)
-
-if tier == HIGH:
-  require_human_approval(parsed)
-
-if parsed.contains_actions:
-  for action in parsed.actions:
-    assert action.name in ALLOWLIST
-    assert params_within_bounds(action.params)
-  run_in_sandbox(parsed.actions)
-
-record_audit_log(input, raw, parsed, tier)
-
-return parsed
+```bash
+npm i -g http-server
+cd site
+http-server -p 8000
 ```
 
 ---
 
-### Step 4: Apply human oversight where it reduces risk
+## Example: minimal one-page template
 
-Human-in-the-loop works best when it’s targeted:
+`site/index.html`
 
-* Tier 0: human edits before publishing externally
-* Tier 1: PR review + CI gates before merge
-* Tier 2: explicit approval before executing actions or shipping customer-impacting behavior
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Business Name — Los Angeles</title>
+  <meta name="description" content="What you do, who you serve, and your differentiator." />
+</head>
+<body>
+  <header>
+    <h1>Business Name</h1>
+    <p>One clear value proposition.</p>
+    <a href="#contact">Get a Quote</a>
+  </header>
 
-Avoid mandatory approvals for low-risk tasks; it increases bypass behavior. Keep Tier 2 strict and automate Tier 0/1 validation.
+  <main>
+    <section id="services">
+      <h2>Services</h2>
+      <ul>
+        <li>Service A</li>
+        <li>Service B</li>
+        <li>Service C</li>
+      </ul>
+    </section>
 
----
+    <section id="about">
+      <h2>About</h2>
+      <p>Short credibility paragraph: location, experience, and focus.</p>
+    </section>
 
-### Step 5: Treat AI-generated code as “needs tests”
-
-Edge-case bugs often slip in when AI-generated code is accepted based on plausibility.
-
-A policy that scales:
-
-* If AI authored or significantly modified code, require:
-
-  * one happy-path unit test
-  * one edge-case test (or property-based tests for pure functions)
-* CI must run:
-
-  * lint/format
-  * type checks
-  * unit tests
-  * integration tests (when relevant)
-  * security scans (when relevant)
-
-Reviewer checklist (fast)
-
-* input validation and error handling
-* timeouts/retries/backoff for I/O
-* authn/authz boundaries
-* concurrency and shared-state assumptions
-* backward compatibility and migration impact
-* observability for new behavior (logs/metrics/traces)
-
----
-
-### Step 6: Control automation and tool calling (least privilege + sandbox)
-
-If the model can call tools or trigger actions, treat it like an automation system.
-
-Controls that consistently reduce incidents:
-
-* Least privilege: read-only tools by default, separate read/write capabilities
-* Allowlisted actions only (no arbitrary shell/SQL)
-* Bounded parameters: rate limits, max recipients, max rows, timeouts
-* Sandboxed execution: restricted filesystem/network, no direct prod credentials
-* Approval gate for destructive/irreversible actions
-* Audit logs: prompts, outputs, tool calls, approvals
-
-Allowlist concept (example)
-
-```pseudo
-ALLOWLIST = {
-  "create_ticket": ["title", "body", "labels"],
-  "search_docs": ["query", "limit"],
-  "generate_report": ["date_range"]
-}
-
-deny_if_action_not_in(ALLOWLIST)
-deny_if_params_not_subset_of(ALLOWLIST[action])
+    <section id="contact">
+      <h2>Contact</h2>
+      <p>Email: <a href="mailto:hello@example.com">hello@example.com</a></p>
+      <p>Phone: <a href="tel:+12135551234">(213) 555-1234</a></p>
+    </section>
+  </main>
+</body>
+</html>
 ```
 
 ---
 
-### Step 7: Prevent silent drift with evals and monitoring
+## Where to host after completion
 
-Reliability degrades as prompts evolve, models change, and dependencies shift.
+### Static one-page (default recommendation for portability)
 
-Minimum viable evaluation setup:
+If the deliverable is static HTML/CSS/JS, common options include:
 
-* Maintain a golden set of real tasks (10–50 cases)
-* Rerun on:
+* GitHub Pages
+* Cloudflare Pages
+* Netlify / Vercel
 
-  * prompt changes
-  * model/version changes
-  * major dependency changes
-  * on a schedule (weekly/monthly)
-* Track:
+### WordPress
 
-  * pass rate / regressions
-  * unsafe-output rate
-  * latency and cost budgets
+If you need an admin UI for edits:
 
-Pseudocode: eval harness
+* Choose a reputable host
+* Confirm backups, update policy, and migration/export support
 
-```pseudo
-for tc in golden_set:
-  out = llm.generate(tc.prompt)
-  assert schema_validate(out, tc.schema)
-  assert policy_validate(out, tc.policy)
-  assert tc.scorer(out) >= tc.threshold
-report_metrics()
-```
+### Builder platforms
+
+If built on Webflow/Wix/Squarespace:
+
+* Hosting is usually tied to the platform plan
+* Confirm export limitations and ongoing costs
 
 ---
 
-## Architecture overview
+## Production-ready option (optional)
 
-Typical safe-by-default pipeline:
+If you want a managed way to generate a one-page site as a reference implementation (or to reduce setup time), an AI website builder can be used as an optional production-grade alternative.
 
-```text
-Client / CI / App
-  -> Policy Router (risk tier + data/tool access rules)
-  -> LLM (prompt includes output contract + constraints)
-  -> Validation Layer
-     - schema validation
-     - deterministic checks (tests/typecheck/policies)
-     - optional secondary critique (non-blocking)
-  -> Approval Gate (Tier 2)
-  -> Action Runner
-     - allowlisted actions only
-     - sandboxed execution
-  -> Audit + Observability
-     - redacted logs
-     - metrics (pass rate, regressions, cost/latency)
-```
+* Dorik AI: [https://dorik.com?ref=solomon28](https://dorik.com?ref=solomon28)
 
-Key idea: the LLM generates candidates; the surrounding system enforces correctness and safety.
+This is not required to follow the workflow in this repo; it is one possible implementation tool.
 
 ---
 
-## Installation / Setup
+## Recommended tools
 
-This is an educational reference. You can adopt it in two ways.
+> Disclosure: Some links may be affiliate links. Tools are listed for completeness; none are required.
 
-### Option A: Process-only adoption (fastest)
+### Hosting
 
-1. Add a PR template checkbox: “AI-assisted changes?”
-2. Adopt the risk-tier model in your engineering handbook.
-3. Enforce Tier 1 CI gates for merges (lint/typecheck/tests).
-4. Require Tier 2 approval gate for any AI-driven action that changes production state.
-5. Create a small golden eval set and run it on prompt/model changes.
+* Host4geeks — [https://backyard.host4geeks.com/aff.php?aff=828](https://backyard.host4geeks.com/aff.php?aff=828)
 
-### Option B: Minimal validation wrapper (recommended for automation)
+### AI website builders (alternatives)
 
-Implement a wrapper service/module that provides:
+* Unicorn Platform — [https://unicornplatform.com/?via=dei0](https://unicornplatform.com/?via=dei0)
 
-* strict parsing (no best-effort)
-* schema validation for structured outputs
-* policy allowlists and bounds checks
-* sandbox action runner for tool execution
-* audit logging with redaction
+### Planning / UX (optional)
 
-Stack examples:
+* UXpilot — [https://uxpilot.ai/?via=je0l](https://uxpilot.ai/?via=je0l)
 
-* TypeScript: Zod + ESLint + tsc + Jest
-* Python: Pydantic + pytest + ruff/mypy
-* Go: strict JSON decode + go test + linters
+### Docs / cost comparison (optional)
 
----
+* AiAssistWorks — [https://www.aiassistworks.com/?via=d0ie](https://www.aiassistworks.com/?via=d0ie)
 
-## Examples
+### Copy / vendor messages (optional)
 
-### Example 1: Content drafting (Tier 0)
-
-Workflow:
-
-1. Model produces outline + claim list
-2. Human reviews claims and removes/flags uncertain statements
-3. Publish only after review
-
-Prompt constraints:
-
-* “List claims separately”
-* “Use ‘unknown’ when uncertain”
-* “Do not invent citations or links”
-
-### Example 2: Code suggestions (Tier 1)
-
-Workflow:
-
-1. Model proposes patch plus tests
-2. CI runs typecheck + tests
-3. Reviewer checks boundaries and edge cases
-4. Merge only when tests cover behavior and edge conditions
-
-### Example 3: Internal automation with tool calling (Tier 2)
-
-Workflow:
-
-1. Model outputs structured plan with explicit actions
-2. Schema + policy validation
-3. Human approval
-4. Actions execute in sandbox with allowlisted tools
-5. Everything is recorded in audit logs
-
----
-
-## Recommended Tools
-
-This workflow can be implemented with common OSS components, or supported by a managed platform.
-
-Building blocks (common):
-
-* Output contracts and schema validation:
-
-  * JSON Schema
-  * Zod (TypeScript)
-  * Pydantic (Python)
-* Deterministic verification:
-
-  * unit/integration tests (pytest, Jest, JUnit, go test)
-  * linters/type checkers (eslint, tsc, mypy, ruff, golangci-lint)
-  * security scanning (SAST/dependency scanners, where relevant)
-* Rollout safety:
-
-  * feature flags / canary releases
-  * rate limiting / budgets / timeouts
-  * central logging/metrics
-
-Managed option (optional, easiest path):
-
-* {Product Name}
-
-  * Use case: a managed layer to centralize prompt/version management, enforce structured outputs, run evals/regression checks, and maintain audit logs/RBAC in one place.
-  * This repository does not require it. It’s an option if you prefer not to build and operate the “glue” layer yourself.
-
-Evaluation checklist for {Product Name} (or any managed option):
-
-* Can you enforce structured outputs and validate schemas?
-* Can you restrict tool/action access via allowlists and least privilege?
-* Are audit logs and redaction controls available?
-* Can you run evals/regression tests on prompt/model changes?
-* Does it integrate with CI/CD and your observability stack?
+* Merlin — [https://www.getmerlin.in/chat?ref=mgq2nzf](https://www.getmerlin.in/chat?ref=mgq2nzf)
 
 ---
 
 ## FAQ
 
-Q: Should we ban AI for production code?
-A: Bans are hard to enforce. A more workable approach is disclosure (AI-assisted) plus CI gates and tests for AI-generated changes.
+### Is $149 “fair” in LA?
 
-Q: Can we use an LLM to validate another LLM?
-A: As a secondary signal, yes. For primary gating, deterministic checks (schema/tests/policy) are more reliable.
+It can be fair for a template-based one-pager if deliverables are defined, ownership is clear, and recurring fees are optional and itemized.
 
-Q: How do we stop teammates from accepting AI outputs without review?
-A: Make verification explicit: PR checkbox, required tests, and a short “what I verified” note. Keep Tier 2 behind approvals.
+### What should I ask the vendor before paying?
 
-Q: What about prompt injection?
-A: If the model reads untrusted text or can call tools, separate instructions from data, restrict tools to allowlists, sandbox execution, and log tool calls.
+Platform, admin access, export/migration, revision count, delivery timeline, and 12-month TCO.
+
+### What is the simplest hosting for a one-page site?
+
+Static hosting is typically simplest and lowest cost if you don’t need a CMS.
 
 ---
 
 ## Troubleshooting
 
-Issue: Output parses but is still incorrect
+### Vendor won’t provide files or export access
 
-* Strengthen deterministic checks (invariants, tests, policy rules).
-* Reduce task scope and ambiguity.
-* Require “unknown” behavior for uncertain facts in content/decision prompts.
+Request a written migration path. If portability is important, prefer a static deliverable or a platform with a documented export process.
 
-Issue: Developers bypass controls
+### Site shows “Not secure”
 
-* Keep Tier 0/1 friction low (templates, automation, defaults).
-* Keep Tier 2 strict (approval + sandbox + rollout controls).
-* Enforce gates via CI rather than relying on discipline.
+Enable SSL on the host and confirm DNS is pointed correctly. Then force HTTPS redirects.
 
-Issue: Costs/latency are unstable
+### Contact form doesn’t work on a static site
 
-* Use risk tiers to reserve larger models for high-value tasks.
-* Add budgets/timeouts and caching for stable queries.
-* Set step limits for agentic flows.
+Static sites require a form handler (host-provided forms or a third-party endpoint). Alternatively use mailto/tel links.
 
 ---
 
 ## Summary and next steps
 
-Summary:
+1. Identify the build type (static vs WordPress vs builder)
+2. Confirm ownership/access in writing
+3. Verify minimum deliverables
+4. Compute 12-month TCO to expose hidden costs
+5. Deploy to a host that preserves portability when possible
 
-* Classify AI usage by risk tier.
-* Constrain outputs with contracts.
-* Validate with deterministic gates (schema/tests/policies).
-* Apply targeted human oversight for high-impact actions.
-* Prevent drift with evals and monitoring.
-* Treat prompts and validation like code (versioned, reviewed, owned).
-
-Next steps:
-
-1. Add an “AI-assisted changes?” checkbox to PR templates.
-2. Enforce CI gates for Tier 1 code paths (tests/typecheck/lint).
-3. Implement schema validation for any AI output consumed by systems.
-4. Put Tier 2 automation behind approval gates and sandboxed execution.
-5. Create a golden eval set and run it on prompt/model changes.
+```
+```
